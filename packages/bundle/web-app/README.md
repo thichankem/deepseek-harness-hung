@@ -42,7 +42,7 @@ Saved model selections override the composition default. Both protocols share `d
 
 ### Configuration
 
-Most users never set these; the command-line flags feed the four settings below — `--host`, `--port`, and `--trusted-host` come from the invocation, and `--no-open` turns the browser handoff off for that invocation:
+Most users never set these; the command-line flags feed the settings below — `--host`, `--port`, and `--trusted-host` come from the invocation, `--no-open` turns the browser handoff off for that invocation, and `--tunnel` enables remote access:
 
 | Field | Default | Meaning |
 |---|---|---|
@@ -50,12 +50,23 @@ Most users never set these; the command-line flags feed the four settings below 
 | `printUrl` | `true` | Print the `dsh web:` URL line at startup |
 | `surfaceContext` | `true` | Give the agent GUI-orientation context and expose `DSH_WEB_URL` to its shell commands |
 | `trustedHosts` | `[]` | Extra hosts allowed to reach the GUI from the network |
+| `tunnel` | `false` | Expose the GUI to the public internet through a Cloudflare quick tunnel |
+| `tunnelName` | — | Named Cloudflare tunnel to run for a custom-domain URL |
+| `tunnelHostname` | — | Public hostname served by the named tunnel, e.g. `dsh.example.com` |
 
 The generated [configuration catalog](../../../docs/config-catalog.md#deepseek-aidsh-web-app) is the exhaustive source for every accepted field and its JSDoc.
 
 ### LAN access and trusted hosts
 
 By default the GUI accepts connections from this machine only. A deployment that binds all network interfaces also allows browsers from the LAN, and the printed URL then includes a LAN address; `--trusted-host` adds extra hosts in either case. Host and Origin checks control reachability, while the token exchange authenticates every Host API method and WebSocket stream. The LAN addresses are sampled once at startup, so a network change later is not picked up — restart the GUI to re-advertise.
+
+### Remote access from anywhere (Cloudflare tunnel)
+
+`dsh --profile web --tunnel` keeps the server bound to `127.0.0.1` (never exposing the harness to the network directly) and starts a Cloudflare quick tunnel that forwards the loopback port to a public HTTPS URL. Startup prints a second line, `dsh web: public tunnel <url>`, whose URL carries the same launch token as the local one, so opening it on any device (including a phone) reaches the authenticated GUI. It also prints a QR code of that URL, so a phone camera can open it instantly. The tunnel needs the `cloudflared` binary on `PATH`; if it is missing, the startup line prints an install hint. A quick tunnel's URL is random and lasts only while the process runs, so use it for on-demand access and stop the process when done.
+
+#### A stable URL on your own domain (named tunnel)
+
+For a fixed public URL on a domain you control, first set up a Cloudflare named tunnel once (`cloudflared tunnel login`, then `cloudflared tunnel create <name>` and `cloudflared tunnel route dns <name> <subdomain.your.domain>`). Afterwards launch `dsh --profile web --tunnel-name <name> --tunnel-hostname <subdomain.your.domain>`; the harness runs that named tunnel and prints `https://<subdomain.your.domain>` (plus its QR code) as the public URL. The named tunnel needs the Cloudflare origin certificate from the `login` step, so run it on the machine that owns that certificate.
 
 ### Running over SSH
 

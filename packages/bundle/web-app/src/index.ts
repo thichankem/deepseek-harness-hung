@@ -12,9 +12,10 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { networkInterfaces } from 'node:os'
+import { networkInterfaces, tmpdir } from 'node:os'
 import { fileURLToPath } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -26,6 +27,7 @@ import { scrubbedParentEnv } from '@deepseek-ai/dsh-subprocess'
 import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-shell-env'
+import qrcode from 'qrcode'
 
 /** Stable Cordis plugin name. */
 export const name = 'web-app'
@@ -55,6 +57,12 @@ export interface Config {
   surfaceContext: boolean
   /** Explicit `--trusted-host` authorities from this invocation. */
   trustedHosts: string[]
+  /** Expose the GUI to the public internet through a Cloudflare tunnel. */
+  tunnel: boolean
+  /** The named Cloudflare tunnel to run, when the user serves a custom domain. */
+  tunnelName?: string
+  /** Public hostname served by the named tunnel, e.g. `dsh.example.com`. */
+  tunnelHostname?: string
 }
 
 export const Config: z<Config> = z.object({
@@ -62,6 +70,9 @@ export const Config: z<Config> = z.object({
   printUrl: z.boolean().default(true),
   surfaceContext: z.boolean().default(true),
   trustedHosts: z.array(String).default([]),
+  tunnel: z.boolean().default(false),
+  tunnelName: z.string(),
+  tunnelHostname: z.string(),
 })
 
 /** Bind-dependent Web values shared by the trust fence and URL display. */
@@ -210,11 +221,135 @@ async function openBrowser(url: string): Promise<void> {
   })
 }
 
-/** Test hooks for the built dist and native browser handoff; production never mutates them. */
+/** Test hooks for the built dist, native browser handoff, and tunnel launch; production never mutates them. */
 export const internals: {
   resolveDistIndex: () => string
   openBrowser: (url: string) => Promise<void>
-} = { resolveDistIndex, openBrowser }
+  startCloudflareTunnel: (port: number, opts?: CloudflareTunnelOptions) => Promise<CloudflareTunnel>
+} = { resolveDistIndex, openBrowser, startCloudflareTunnel }
+
+/** Regex matching the public URL Cloudflare quick tunnels print on stdout. */
+const CLOUDFLARE_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/u
+/** Regex matching a named tunnel's readiness line on stderr. */
+const CLOUDFLARE_CONNECTED_RE = /Registered tunnel connection/u
+
+/** Which tunnel to run and its public origin. */
+export interface CloudflareTunnelOptions {
+  /** The named Cloudflare tunnel to run; absent means a quick tunnel. */
+  name?: string
+  /** Public hostname served by the named tunnel, e.g. `dsh.example.com`. */
+  hostname?: string
+}
+
+/** A running Cloudflare tunnel and its public URL. */
+export interface CloudflareTunnel {
+  /** The public HTTPS origin Cloudflare assigned to this tunnel. */
+  url: string
+  /** Stop the tunnel child process. */
+  dispose: () => void
+}
+
+/**
+ * Launch a Cloudflare tunnel forwarding to the loopback Web server and resolve
+ * its public URL. A quick tunnel (no {@link CloudflareTunnelOptions.name})
+ * yields a random `*.trycloudflare.com` origin parsed from the child's output;
+ * a named tunnel yields `https://<hostname>` once cloudflared confirms a
+ * connection. The returned disposer kills the child; a missing binary, an
+ * early exit, or a 30s silence rejects.
+ * @param port - the loopback Web server port to forward.
+ * @param opts - the tunnel kind and, for a named tunnel, its public hostname.
+ * @returns the public tunnel URL and its disposer.
+ */
+function startCloudflareTunnel(port: number, opts: CloudflareTunnelOptions = {}): Promise<CloudflareTunnel> {
+  // A named tunnel forwards through a generated ingress config (the `run`
+  // subcommand rejects `--url`); a quick tunnel forwards with `--url` alone.
+  let configDir: string | undefined
+  let args: string[]
+  if (opts.name === undefined) {
+    args = ['tunnel', '--url', `http://${LOOPBACK_HOST}:${String(port)}`]
+  } else {
+    configDir = mkdtempSync(join(tmpdir(), 'dsh-web-tunnel-'))
+    const configPath = join(configDir, 'config.yml')
+    writeFileSync(configPath, [
+      `tunnel: ${opts.name}`,
+      'ingress:',
+      `  - hostname: ${opts.hostname}`,
+      `    service: http://${LOOPBACK_HOST}:${String(port)}`,
+      '  - service: http_status:404',
+      '',
+    ].join('\n'))
+    args = ['tunnel', '--config', configPath, 'run', opts.name]
+  }
+  const knownUrl = opts.hostname === undefined ? undefined : `https://${opts.hostname}`
+  return new Promise((resolve, reject) => {
+    let child: ChildProcess
+    try {
+      child = spawn('cloudflared', args, {
+        env: scrubbedParentEnv(),
+        stdio: ['ignore', 'pipe', 'pipe'],
+      })
+    } catch (error) {
+      if (configDir !== undefined) rmSync(configDir, { recursive: true, force: true })
+      reject(new Error(`could not spawn cloudflared: ${error instanceof Error ? error.message : String(error)}`))
+      return
+    }
+    let output = ''
+    let settled = false
+    const timer = setTimeout(() => {
+      if (settled) return
+      settled = true
+      child.kill()
+      if (configDir !== undefined) rmSync(configDir, { recursive: true, force: true })
+      reject(new Error('cloudflared did not report a public URL within 30s'))
+    }, 30_000)
+    const finish = (error: Error | null, url?: string): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      if (error !== null) {
+        child.kill()
+        if (configDir !== undefined) rmSync(configDir, { recursive: true, force: true })
+        reject(error)
+      } else {
+        resolve({ url: url as string, dispose: () => { child.kill(); if (configDir !== undefined) rmSync(configDir, { recursive: true, force: true }) } })
+      }
+    }
+    child.once('error', (error: Error) => {
+      const hint = (error as NodeJS.ErrnoException).code === 'ENOENT'
+        ? 'cloudflared is not installed or not on PATH; install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/'
+        : error.message
+      finish(new Error(hint))
+    })
+    // cloudflared logs to stderr; the quick-tunnel URL and the named-tunnel
+    // readiness line both appear there, so match both streams.
+    for (const stream of [child.stdout, child.stderr]) {
+      stream?.setEncoding('utf8')
+      stream?.on('data', (chunk: string) => {
+        output += chunk
+        if (knownUrl !== undefined) {
+          if (CLOUDFLARE_CONNECTED_RE.test(output)) finish(null, knownUrl)
+        } else {
+          const match = output.match(CLOUDFLARE_URL_RE)
+          if (match !== null) finish(null, match[0])
+        }
+      })
+    }
+    child.once('close', (code) => {
+      if (!settled) {
+        // Surface the last cloudflared line so a setup failure (for example a
+        // missing Cloudflare origin certificate) is diagnosable, not a bare code.
+        const hint = output.trim().split(/\r?\n/u).filter(Boolean).slice(-3).join(' ')
+        finish(new Error(`cloudflared exited with code ${String(code)} before reporting a URL${hint === '' ? '' : `: ${hint}`}`))
+      }
+    })
+  })
+}
+
+/** Render a scannable QR code of `url` to the terminal. */
+async function printQr(url: string): Promise<void> {
+  const terminal = await qrcode.toString(url, { type: 'terminal', small: true })
+  process.stdout.write(`\n${terminal}\n`)
+}
 
 /**
  * Mount the Web runtime: dist serving, surface prompt, the bash runtime
@@ -275,6 +410,22 @@ export function apply(ctx: Context, config: Config): void {
           void internals.openBrowser(authenticatedUrl).catch((error: unknown) => {
             const reason = error instanceof Error ? error.message : String(error)
             console.error(`web-app: could not open the default browser because ${reason}; use the dsh web URL printed at startup`)
+          })
+        }
+        if (config.tunnel) {
+          void internals.startCloudflareTunnel(port, {
+            ...config.tunnelName !== undefined && { name: config.tunnelName },
+            ...config.tunnelHostname !== undefined && { hostname: config.tunnelHostname },
+          }).then(async (tunnel) => {
+            if (config.printUrl) {
+              const publicUrl = connectionCtx.connection.authenticatedUrl(tunnel.url)
+              console.log(`dsh web: public tunnel ${publicUrl}`)
+              console.log('dsh web: scan the QR code below with your phone camera to open it')
+              await printQr(publicUrl)
+            }
+          }).catch((error: unknown) => {
+            const reason = error instanceof Error ? error.message : String(error)
+            console.error(`web-app: could not start the public tunnel because ${reason}`)
           })
         }
       }

@@ -10,6 +10,13 @@
   padding: 0 var(--dsh-composer-side-clearance) 4px;
 }
 
+/* iPhone home indicator: lift the composer above the bottom safe area. */
+@media (max-width: 767px) {
+  .root {
+    padding-bottom: calc(4px + env(safe-area-inset-bottom));
+  }
+}
+
 .dock {
   display: flex;
   align-items: center;

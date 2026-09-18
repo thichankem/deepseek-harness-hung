@@ -31,6 +31,15 @@ export const zh = {
   'connection.connected': '连接成功',
   'connection.reconnect': '连接异常，点击立即重连',
   'connection.restart': '连接中断，正在重试，点击立即重连',
+  'remote.nav': '远程连接',
+  'remote.title': '远程连接',
+  'remote.description': '扫描二维码，在手机上打开此会话。',
+  'remote.qrHint': '用手机相机扫描以连接',
+  'remote.urlLabel': '连接地址',
+  'remote.copy': '复制',
+  'remote.copied': '已复制',
+  'remote.notPublic': '当前地址仅在本机可访问。请使用 --tunnel 启动以获取公网二维码。',
+  'remote.localOnly': '本机地址',
 } satisfies Record<string, string>
 
 /** The settings namespace key union. */
@@ -67,4 +76,13 @@ export const en = {
   'connection.connected': 'Connected',
   'connection.reconnect': 'Disconnected, reconnect now',
   'connection.restart': 'Reconnecting, reconnect now',
+  'remote.nav': 'Remote Connection',
+  'remote.title': 'Remote Connection',
+  'remote.description': 'Scan the QR code to open this session on your phone.',
+  'remote.qrHint': 'Scan with your phone camera to connect',
+  'remote.urlLabel': 'Connection URL',
+  'remote.copy': 'Copy',
+  'remote.copied': 'Copied',
+  'remote.notPublic': 'This address is only reachable on this machine. Start with --tunnel to get a public QR code.',
+  'remote.localOnly': 'Local address',
 } satisfies Record<SettingsKey, string>

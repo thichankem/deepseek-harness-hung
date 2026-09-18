@@ -3590,6 +3590,12 @@ export interface Config {
   surfaceContext: boolean
   /** Explicit `--trusted-host` authorities from this invocation. */
   trustedHosts: string[]
+  /** Expose the GUI to the public internet through a Cloudflare tunnel. */
+  tunnel: boolean
+  /** The named Cloudflare tunnel to run, when the user serves a custom domain. */
+  tunnelName?: string
+  /** Public hostname served by the named tunnel, e.g. `dsh.example.com`. */
+  tunnelHostname?: string
 }
 ```
 

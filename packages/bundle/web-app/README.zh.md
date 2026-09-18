@@ -42,7 +42,7 @@ dsh --profile web --no-open --port 8080
 
 ### 配置
 
-大多数用户不需要设置这些；命令行 flag 会提供给下面四个设置——`--host`、`--port` 与 `--trusted-host` 来自本次调用，`--no-open` 仅对本次调用关闭浏览器交接：
+大多数用户不需要设置这些；命令行 flag 会提供给下面的设置——`--host`、`--port` 与 `--trusted-host` 来自本次调用，`--no-open` 仅对本次调用关闭浏览器交接，`--tunnel` 启用远程访问：
 
 | 字段 | 默认值 | 含义 |
 |---|---|---|
@@ -50,12 +50,23 @@ dsh --profile web --no-open --port 8080
 | `printUrl` | `true` | 启动时打印 `dsh web:` URL 行 |
 | `surfaceContext` | `true` | 给 agent 提供 GUI 定位上下文，并把 `DSH_WEB_URL` 暴露给其 shell 命令 |
 | `trustedHosts` | `[]` | 允许从网络访问 GUI 的额外主机 |
+| `tunnel` | `false` | 通过 Cloudflare quick tunnel 将 GUI 暴露到公网 |
+| `tunnelName` | — | 为自定义域名 URL 运行的 Cloudflare named tunnel |
+| `tunnelHostname` | — | named tunnel 提供的公网主机名，例如 `dsh.example.com` |
 
 生成的[配置目录](../../../docs/config-catalog.zh.md#deepseek-aidsh-web-app)是每个受支持字段及其 JSDoc 的穷尽式真源。
 
 ### LAN 访问与可信主机
 
 默认情况下 GUI 只接受本机的连接。绑定所有网络接口的部署也会允许 LAN 内的浏览器访问，此时打印的 URL 会附带一个 LAN 地址；`--trusted-host` 在两种情况下都能添加额外主机。Host 与 Origin 检查控制可达性，token 交换则认证每个 Host API 方法与 WebSocket 流。LAN 地址只在启动时采样一次，因此之后的网络变化不会被感知——重启 GUI 以重新公告。
+
+### 随时随地远程访问（Cloudflare tunnel）
+
+`dsh --profile web --tunnel` 让服务器继续只绑定 `127.0.0.1`（绝不直接把 harness 暴露到网络上），并启动一个 Cloudflare quick tunnel，把 loopback 端口转发到一个公网 HTTPS URL。启动时会多打印一行 `dsh web: public tunnel <url>`，该 URL 携带与本地 URL 相同的启动 token，因此在任意设备（包括手机）上打开即可进入已认证的 GUI。同时还会打印该 URL 的二维码，用手机相机扫描即可立即打开。此功能需要 `cloudflared` 二进制位于 `PATH` 上；若缺失，启动行会打印安装提示。quick tunnel 的 URL 是随机的，且仅在进程运行时有效，因此适合按需访问，用完即停。
+
+#### 在你自己的域名上使用固定 URL（named tunnel）
+
+要在一个你控制的域名上获得固定的公网 URL，请先一次性设置好 Cloudflare named tunnel（`cloudflared tunnel login`，然后 `cloudflared tunnel create <name>` 和 `cloudflared tunnel route dns <name> <子域名.你的域名>`）。之后用 `dsh --profile web --tunnel-name <name> --tunnel-hostname <子域名.你的域名>` 启动；harness 会运行该 named tunnel，并把 `https://<子域名.你的域名>`（连同二维码）作为公网 URL 打印出来。named tunnel 需要 `login` 步骤生成的 Cloudflare 源证书，因此请在持有该证书的机器上运行。
 
 ### 通过 SSH 运行
 

@@ -23,6 +23,12 @@ export const WEB_STARTUP_SERVICE = 'webStartup'
 export interface WebStartupValues {
   /** Whether this invocation opens the default browser after startup. */
   openBrowser: boolean
+  /** Whether this invocation exposes the GUI through a public Cloudflare tunnel. */
+  tunnel: boolean
+  /** The named Cloudflare tunnel to run, when the user serves a custom domain. */
+  tunnelName?: string
+  /** Public hostname served by the named tunnel, e.g. `dsh.example.com`. */
+  tunnelHostname?: string
   /** `--host`, absent when the invocation did not name one. */
   host?: string
   /** `--port`, absent when the invocation did not name one. */
@@ -37,6 +43,9 @@ interface WebOptions {
   open: boolean
   port?: string
   trustedHost?: string[]
+  tunnel?: boolean
+  tunnelName?: string
+  tunnelHostname?: string
 }
 
 /**
@@ -52,11 +61,17 @@ function webCommand(): Command {
     .option('--no-open', 'do not open the Web UI in the default browser')
     .option('--port <port>', 'listen port; pass 0 to let the OS pick a free one')
     .option('--trusted-host <authority...>', 'extra authority the /api browser-trust fence accepts (host or host:port; repeatable)')
+    .option('--tunnel', 'expose the GUI to the public internet through a Cloudflare quick tunnel')
+    .option('--tunnel-name <name>', 'run the named Cloudflare tunnel <name>; pairs with --tunnel-hostname (requires prior cloudflared tunnel setup)')
+    .option('--tunnel-hostname <host>', 'public hostname served by the named tunnel, e.g. dsh.example.com')
     .addHelpText('after', `
 Examples:
   dsh --profile web                          serve on the composed host and port
   dsh --profile web --no-open                serve without opening a browser
   dsh --profile web --port 8080              serve on another port
+  dsh --profile web --tunnel                 also print a public HTTPS URL via Cloudflare
+  dsh --profile web --tunnel-name my-tunnel --tunnel-hostname dsh.example.com
+                                             serve on your own domain through a named tunnel
 `)
 }
 
@@ -79,6 +94,9 @@ export function apply(ctx: Context): void {
     }
     ctx.provide(WEB_STARTUP_SERVICE, {
       openBrowser: options.open,
+      tunnel: options.tunnel === true || options.tunnelName !== undefined,
+      ...options.tunnelName !== undefined && { tunnelName: options.tunnelName },
+      ...options.tunnelHostname !== undefined && { tunnelHostname: options.tunnelHostname },
       ...options.host !== undefined && { host: options.host },
       ...options.port !== undefined && { port: Number(options.port) },
       trustedHosts: options.trustedHost ?? [],
