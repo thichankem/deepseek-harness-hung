@@ -138,6 +138,20 @@ export function ConversationSessionHeader({
                 <StateDot state={statusState} size={12} />
                 <span className={css.sessionStatusLabel}>{statusLabel}</span>
               </span>
+              <button
+                type="button"
+                className={css.reload}
+                title={t('session.reload')}
+                aria-label={t('session.reload')}
+                onClick={() => { window.location.reload() }}
+              >
+                <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+                  <path
+                    fill="currentColor"
+                    d="M13.645 2.355A7.954 7.954 0 0 0 8 0C3.588 0 0 3.589 0 8s3.588 8 8 8a8 8 0 0 0 7.746-5.852l-1.924-.548A6.008 6.008 0 0 1 8 14a6 6 0 1 1 0-12c1.655 0 3.082.674 4.359 1.641L10 6h6V0l-2.356 2.357z"
+                  />
+                </svg>
+              </button>
               <div className={css.headerActions}>
                 {renderSlot('conversation.session.header.actions', {})}
               </div>
