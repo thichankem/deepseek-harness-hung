@@ -1,6 +1,9 @@
 /** Browser-session authentication for the Host Connection carrier. */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import { credentialKey } from '@deepseek-ai/dsh-credentials'
 import type { CredentialProvider, CredentialRecord } from '@deepseek-ai/dsh-credentials'
 import type {
@@ -13,6 +16,9 @@ const AUTH_RECORD_KEY = credentialKey('client-connection', 'browser-session')
 const DAY_MILLISECONDS = 24 * 60 * 60 * 1000
 const SECRET_BYTES = 32
 const TOKEN_QUERY = 'token'
+// Persisted so the phone-reachable URL stays valid across dsh restarts instead
+// of rotating a fresh launch token every boot.
+const LAUNCH_TOKEN_FILE = join(homedir(), '.dsh', 'launch-token')
 const COOKIE_PREFIX = 'dsh-auth-'
 const COOKIE_PAYLOAD_VERSION = 1
 const STORED_SECRET_VERSION = 1
@@ -52,9 +58,33 @@ function decodeBase64Url(value: string): Buffer | undefined {
 function processLaunchToken(owner: object): string {
   const existing = PROCESS_LAUNCH_TOKENS.get(owner)
   if (existing !== undefined) return existing
-  const created = encodeBase64Url(randomBytes(SECRET_BYTES))
+  let created = readLaunchToken()
+  if (created === undefined) {
+    created = encodeBase64Url(randomBytes(SECRET_BYTES))
+    writeLaunchToken(created)
+  }
   PROCESS_LAUNCH_TOKENS.set(owner, created)
   return created
+}
+
+/** Reuse the persisted launch token so remote URLs survive a restart. */
+function readLaunchToken(): string | undefined {
+  try {
+    const value = readFileSync(LAUNCH_TOKEN_FILE, 'utf8').trim()
+    return value.length > 0 ? value : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Persist a freshly generated launch token for the next process. */
+function writeLaunchToken(token: string): void {
+  try {
+    mkdirSync(join(homedir(), '.dsh'), { recursive: true })
+    writeFileSync(LAUNCH_TOKEN_FILE, token, 'utf8')
+  } catch {
+    // Best-effort: an unwritable home dir must not block startup.
+  }
 }
 
 function header(
