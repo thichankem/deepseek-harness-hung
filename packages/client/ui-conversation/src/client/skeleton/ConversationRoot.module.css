@@ -84,6 +84,13 @@
   white-space: nowrap;
 }
 
+/* Hide the session-hierarchy breadcrumb on phones so the header stays tidy. */
+@media (max-width: 1023px) {
+  .crumbs {
+    display: none;
+  }
+}
+
 .crumbSeg {
   display: inline-flex;
   align-items: center;
