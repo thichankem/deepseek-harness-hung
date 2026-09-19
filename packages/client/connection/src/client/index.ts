@@ -179,8 +179,8 @@ interface ConnectionOwner {
 interface BrowserNetworkTarget {
   readonly navigator?: { readonly onLine?: boolean }
   readonly document?: { readonly visibilityState?: DocumentVisibilityState }
-  addEventListener(type: 'online' | 'offline' | 'visibilitychange', listener: () => void): void
-  removeEventListener(type: 'online' | 'offline' | 'visibilitychange', listener: () => void): void
+  addEventListener(type: 'online' | 'offline' | 'visibilitychange' | 'focus', listener: () => void): void
+  removeEventListener(type: 'online' | 'offline' | 'visibilitychange' | 'focus', listener: () => void): void
 }
 
 function watchBrowserNetwork(controller: ConnectionController): () => void {
@@ -192,17 +192,24 @@ function watchBrowserNetwork(controller: ConnectionController): () => void {
   // Mobile browsers suspend the Gateway WebSocket while the tab is hidden; on
   // return the socket is dead but the close event may not have fired. Force a
   // fresh generation so the GUI re-syncs instead of waiting for a user tap.
+  // `focus` is a second signal some mobile browsers fire instead of (or before)
+  // `visibilitychange` when the app is brought back to the foreground.
   const visible = (): void => {
+    if (browser.document?.visibilityState === 'visible') controller.reconnect()
+  }
+  const focused = (): void => {
     if (browser.document?.visibilityState === 'visible') controller.reconnect()
   }
   controller.setNetworkAvailable(initiallyAvailable)
   browser.addEventListener('online', online)
   browser.addEventListener('offline', offline)
   browser.addEventListener('visibilitychange', visible)
+  browser.addEventListener('focus', focused)
   return () => {
     browser.removeEventListener('online', online)
     browser.removeEventListener('offline', offline)
     browser.removeEventListener('visibilitychange', visible)
+    browser.removeEventListener('focus', focused)
   }
 }
 
