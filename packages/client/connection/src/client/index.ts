@@ -178,8 +178,9 @@ interface ConnectionOwner {
 
 interface BrowserNetworkTarget {
   readonly navigator?: { readonly onLine?: boolean }
-  addEventListener(type: 'online' | 'offline', listener: () => void): void
-  removeEventListener(type: 'online' | 'offline', listener: () => void): void
+  readonly document?: { readonly visibilityState?: DocumentVisibilityState }
+  addEventListener(type: 'online' | 'offline' | 'visibilitychange', listener: () => void): void
+  removeEventListener(type: 'online' | 'offline' | 'visibilitychange', listener: () => void): void
 }
 
 function watchBrowserNetwork(controller: ConnectionController): () => void {
@@ -188,12 +189,20 @@ function watchBrowserNetwork(controller: ConnectionController): () => void {
   if (browser === undefined || initiallyAvailable === undefined) return () => {}
   const online = (): void => { controller.setNetworkAvailable(true) }
   const offline = (): void => { controller.setNetworkAvailable(false) }
+  // Mobile browsers suspend the Gateway WebSocket while the tab is hidden; on
+  // return the socket is dead but the close event may not have fired. Force a
+  // fresh generation so the GUI re-syncs instead of waiting for a user tap.
+  const visible = (): void => {
+    if (browser.document?.visibilityState === 'visible') controller.reconnect()
+  }
   controller.setNetworkAvailable(initiallyAvailable)
   browser.addEventListener('online', online)
   browser.addEventListener('offline', offline)
+  browser.addEventListener('visibilitychange', visible)
   return () => {
     browser.removeEventListener('online', online)
     browser.removeEventListener('offline', offline)
+    browser.removeEventListener('visibilitychange', visible)
   }
 }
 
