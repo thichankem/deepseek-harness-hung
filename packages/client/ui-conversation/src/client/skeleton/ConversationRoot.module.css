@@ -135,23 +135,6 @@
   gap: 8px;
 }
 
-.sessionStatus {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--dsw-alias-interactive-bg-hover);
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--dsw-alias-label-secondary);
-}
-
-.sessionStatusLabel {
-  white-space: nowrap;
-}
-
 .reload {
   display: inline-flex;
   flex: none;
