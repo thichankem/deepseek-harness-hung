@@ -2,6 +2,7 @@
 
 import clsx from 'clsx'
 import type { SessionListState, SessionSummary } from '@deepseek-ai/dsh-api-session-controller/client'
+import { StateDot, type StateDotState } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import type {
   ConversationSessionHeaderSlotProps, ConversationSessionSlotProps,
@@ -58,7 +59,7 @@ function equalBreadcrumbs(left: readonly Breadcrumb[], right: readonly Breadcrum
  */
 export function ConversationSessionHeader({
   sessionId, useSession, useSessions, useConversation, useConversationViews, useStore,
-  renderSlot, open, selectView, t,
+  useSessionPendingInteraction, renderSlot, open, selectView, t,
 }: ConversationSessionHeaderProps) {
   const tabs = useConversationViews(value => value)
   const selectedId = useStore(s => s.view)
@@ -66,7 +67,15 @@ export function ConversationSessionHeader({
   const ancestry = useSessions(s => deriveAncestry(s, sessionId), equalBreadcrumbs)
   const session = useSession(s => s)
   const conversation = useConversation(s => s)
+  const pendingInteraction = useSessionPendingInteraction(s => s.get(sessionId))
   const hideChrome = session.blank && conversationPhase(session, conversation) === 'blank'
+  // Live session status: pending user input outranks running, which outranks done.
+  const statusState: StateDotState = pendingInteraction !== undefined
+    ? 'warning'
+    : session.running ? 'ongoing' : 'done'
+  const statusLabel = pendingInteraction !== undefined
+    ? t('status.waiting')
+    : session.running ? t('status.running') : t('status.done')
   return (
     <header className={clsx(css.header, hideChrome && css.headerBlank)}>
       <div className={css.titleRow}>
@@ -125,6 +134,10 @@ export function ConversationSessionHeader({
                 })}
                 {ancestry.length === 0 && <span className={css.crumbCurrent}>{sessionId}</span>}
               </nav>
+              <span className={css.sessionStatus} title={statusLabel}>
+                <StateDot state={statusState} size={12} />
+                <span className={css.sessionStatusLabel}>{statusLabel}</span>
+              </span>
               <div className={css.headerActions}>
                 {renderSlot('conversation.session.header.actions', {})}
               </div>
