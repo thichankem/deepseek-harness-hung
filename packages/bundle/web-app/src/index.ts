@@ -393,6 +393,10 @@ export function apply(ctx: Context, config: Config): void {
   // The loopback URL belongs to this host. Under SSH, the operator reaches it
   // through a local forwarding address that this process cannot derive.
   const handoffBrowser = config.openBrowser && !launchedThroughSsh(launchEnvironmentOf(ctx))
+  // A phone-reachable origin for the Remote Connection QR (e.g. a Tailscale
+  // URL). Config wins; the DSH_WEB_PUBLIC_URL environment variable is the
+  // convenient override for a wrapper that starts dsh behind a proxy.
+  const publicUrl = config.publicUrl ?? process.env.DSH_WEB_PUBLIC_URL
   // Release dependent rows only after bind-dependent trust has been sampled once.
   ctx.provide(WEB_RUNTIME_SERVICE, runtime)
   // On-demand public access: a Remote-owned Cloudflare tunnel whose origin the
@@ -401,7 +405,7 @@ export function apply(ctx: Context, config: Config): void {
     port: ctx.webServer.port,
     startTunnel: (port) => internals.startCloudflareTunnel(port),
     authenticate: (url) => ctx.get('connection')?.authenticatedUrl(url) ?? url,
-    ...config.publicUrl !== undefined && { publicUrl: config.publicUrl },
+    ...publicUrl !== undefined && { publicUrl },
   })
   ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
   if (config.surfaceContext) {
