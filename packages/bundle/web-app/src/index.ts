@@ -12,7 +12,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { networkInterfaces, tmpdir } from 'node:os'
@@ -227,7 +227,8 @@ export const internals: {
   resolveDistIndex: () => string
   openBrowser: (url: string) => Promise<void>
   startCloudflareTunnel: (port: number, opts?: CloudflareTunnelOptions) => Promise<CloudflareTunnel>
-} = { resolveDistIndex, openBrowser, startCloudflareTunnel }
+  resolveCloudflaredBinary: () => string
+} = { resolveDistIndex, openBrowser, startCloudflareTunnel, resolveCloudflaredBinary }
 
 /** Regex matching the public URL Cloudflare quick tunnels print on stdout. */
 const CLOUDFLARE_URL_RE = /https:\/\/[a-z0-9-]+\.trycloudflare\.com/u
@@ -248,6 +249,27 @@ export interface CloudflareTunnel {
   url: string
   /** Stop the tunnel child process. */
   dispose: () => void
+}
+
+/**
+ * Resolve the cloudflared executable, preferring known Windows install paths
+ * so the tunnel works even when the server process did not inherit a PATH that
+ * lists the binary. Falls back to the bare name, letting the OS resolve via
+ * PATH (Unix and PATH-installed Windows builds).
+ * @returns the cloudflared executable path or the bare command name.
+ */
+function resolveCloudflaredBinary(): string {
+  if (process.platform === 'win32') {
+    const candidates = [
+      join(process.env['ProgramFiles(x86)'] ?? '', 'cloudflared', 'cloudflared.exe'),
+      join(process.env.ProgramFiles ?? '', 'cloudflared', 'cloudflared.exe'),
+      join(process.env.LOCALAPPDATA ?? '', 'Microsoft', 'WinGet', 'Links', 'cloudflared.exe'),
+    ]
+    for (const candidate of candidates) {
+      if (candidate !== '' && existsSync(candidate)) return candidate
+    }
+  }
+  return 'cloudflared'
 }
 
 /**
@@ -285,7 +307,7 @@ function startCloudflareTunnel(port: number, opts: CloudflareTunnelOptions = {})
   return new Promise((resolve, reject) => {
     let child: ChildProcess
     try {
-      child = spawn('cloudflared', args, {
+      child = spawn(internals.resolveCloudflaredBinary(), args, {
         env: scrubbedParentEnv(),
         stdio: ['ignore', 'pipe', 'pipe'],
       })

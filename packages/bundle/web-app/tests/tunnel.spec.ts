@@ -73,11 +73,16 @@ describe('web-app Cloudflare tunnel launcher', () => {
     const dir = mkdtempSync(join(tmpdir(), 'dsh-web-tunnel-empty-'))
     tempDirs.push(dir)
     const originalPath = process.env.PATH
+    const originalResolver = internals.resolveCloudflaredBinary
+    // Force the PATH-only fallback so the empty PATH yields ENOENT even when a
+    // known install location holds the binary.
+    internals.resolveCloudflaredBinary = () => 'cloudflared'
     process.env.PATH = dir
     try {
       await expect(internals.startCloudflareTunnel(3080)).rejects.toThrow(/cloudflared is not installed/)
     } finally {
       process.env.PATH = originalPath
+      internals.resolveCloudflaredBinary = originalResolver
     }
   })
 })

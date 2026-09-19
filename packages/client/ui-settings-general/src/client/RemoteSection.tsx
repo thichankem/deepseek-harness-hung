@@ -46,6 +46,7 @@ export function RemoteSection({ t, startPublicAccess }: RemoteSectionProps) {
   const [publicUrl, setPublicUrl] = useState<string | undefined>(undefined)
   const [starting, setStarting] = useState(false)
   const [failed, setFailed] = useState(false)
+  const [failReason, setFailReason] = useState<string | undefined>(undefined)
   const loopbackOnly = LOOPBACK_RE.test(currentUrl)
   const displayUrl = publicUrl ?? currentUrl
 
@@ -68,11 +69,13 @@ export function RemoteSection({ t, startPublicAccess }: RemoteSectionProps) {
   const startPublic = async (): Promise<void> => {
     setStarting(true)
     setFailed(false)
+    setFailReason(undefined)
     try {
       const origin = await startPublicAccess()
       setPublicUrl(withLaunchToken(origin))
-    } catch {
+    } catch (error) {
       setFailed(true)
+      setFailReason(error instanceof Error ? error.message : String(error))
     } finally {
       setStarting(false)
     }
@@ -84,7 +87,12 @@ export function RemoteSection({ t, startPublicAccess }: RemoteSectionProps) {
       {loopbackOnly && publicUrl === undefined
         ? <p className={css.notice}>{t('remote.notPublic')}</p>
         : null}
-      {failed ? <p className={css.notice}>{t('remote.startFailed')}</p> : null}
+      {failed ? (
+        <p className={css.notice}>
+          {t('remote.startFailed')}
+          {failReason !== undefined && failReason !== '' ? ` ${failReason}` : ''}
+        </p>
+      ) : null}
       <div className={css.card}>
         {qr !== undefined
           ? <img className={css.qr} src={qr} alt={t('remote.qrHint')} />
