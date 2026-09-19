@@ -177,6 +177,18 @@
   line-height: 20px;
 }
 
+.statusLabel {
+  flex: none;
+  margin-left: 6px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--dsw-alias-interactive-bg-hover);
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--dsw-alias-label-secondary);
+  white-space: nowrap;
+}
+
 .renameInput {
   min-width: 0;
   font-size: 14px;

@@ -429,7 +429,9 @@ export function SessionNodeItem({
   const selected = node.id === currentId
   const statuses = sessionStatuses(node, t)
   const primaryStatus = statuses[0]
-  const showStatus = primaryStatus.state !== 'done' || row.completed
+  // Always surface the live status dot in the sidebar; a running or waiting
+  // session also shows its label so it stands out at a glance.
+  const showStatus = true
   const draggable = drag !== undefined && !row.blank
   const [menuOpen, setMenuOpen] = useState(false)
   const rowRef = useRef<HTMLDivElement>(null)
@@ -496,6 +498,9 @@ export function SessionNodeItem({
         </span>
       )}
       <span ref={titleRef} className={css.title}>{title}</span>
+      {showStatus && primaryStatus.state !== 'done' && (
+        <span className={css.statusLabel}>{primaryStatus.label}</span>
+      )}
       {row.hasActiveSchedule && <ActiveScheduleIndicator t={t} />}
       {/* A blank New Session row is a provisional placeholder: nothing has
           happened in it yet, so a "now" timestamp and the row verbs
