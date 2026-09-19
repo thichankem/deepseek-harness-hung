@@ -11,7 +11,6 @@
 
 import { release as osRelease } from 'node:os'
 import { dirname, extname } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { runNativeCommand, type NativeCommandRunner } from './runner.ts'
 
 /** Testable command boundary; native implementations never invoke a shell. */
@@ -244,10 +243,20 @@ export async function revealNativePath(
       windowsPath = translated.stdout.replace(/[\r\n]+$/, '')
       if (windowsPath === '') throw new Error('wslpath returned no Windows path')
     }
-    // Explorer parses commas itself; a file URI preserves commas and whitespace in the path.
-    const target = pathToFileURL(windowsPath, { windows: true }).href.replaceAll(',', '%2C')
+    // Explorer's /select flag expects a native Windows path, not a file:// URI
+    // (which it does not reliably honor for selection). Quote the path so
+    // spaces and commas survive Explorer's own argument parsing. On native
+    // Windows, route the command through the shell: explorer.exe ignores
+    // /select when launched via CreateProcess (execFile), opening the default
+    // folder instead; the shell hands it off via ShellExecute, which navigates
+    // to and selects the file even when the path contains spaces.
+    const target = `"${windowsPath}"`
     try {
-      await run('explorer.exe', ['/select,', target], signal)
+      if (platform === 'win32') {
+        await run(`explorer.exe /select,${target}`, [], signal, { shell: true })
+      } else {
+        await run('explorer.exe', [`/select,${target}`], signal)
+      }
     } catch (error) {
       signal.throwIfAborted()
       // Explorer can exit 1 after delegating to the existing desktop process.

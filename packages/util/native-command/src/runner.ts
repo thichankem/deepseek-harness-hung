@@ -5,11 +5,23 @@
 
 import { execFile } from 'node:child_process'
 
-/** Testable command boundary; native implementations never invoke a shell. */
+/** Runner options beyond the command line. */
+export interface NativeCommandOptions {
+  /**
+   * Route the command through the platform shell (cmd on Windows, sh on Unix)
+   * instead of CreateProcess. Reserved for commands that only honor their
+   * arguments when the shell hands them off via ShellExecute, notably
+   * `explorer.exe /select,<path>` on Windows.
+   */
+  readonly shell?: boolean
+}
+
+/** Testable command boundary; native implementations normally avoid a shell. */
 export type NativeCommandRunner = (
   command: string,
   args: readonly string[],
   signal: AbortSignal,
+  options?: NativeCommandOptions,
 ) => Promise<{ stdout: string; stderr: string }>
 
 /**
@@ -19,12 +31,12 @@ export type NativeCommandRunner = (
  * @param signal - caller/connection lifetime; abort terminates the child.
  * @returns captured stdout/stderr on exit 0.
  */
-export const runNativeCommand: NativeCommandRunner = (command, args, signal) =>
+export const runNativeCommand: NativeCommandRunner = (command, args, signal, options = {}) =>
   new Promise((resolve, reject) => {
     execFile(
       command,
       [...args],
-      { encoding: 'utf8', signal, windowsHide: true },
+      { encoding: 'utf8', signal, windowsHide: true, shell: options.shell === true },
       (error, stdout, stderr) => {
         if (error !== null) {
           const failure = Object.assign(new Error(error.message, { cause: error }), {

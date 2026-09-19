@@ -1,5 +1,5 @@
 ---
-description: "Host-native command and path-opening utilities with shell-free execution, cancellation, desktop detection, and WSL path handoff."
+description: "Host-native command and path-opening utilities with shell-free execution (plus a shell opt-in for the Explorer reveal), cancellation, desktop detection, and WSL path handoff."
 kind: "package-library"
 ---
 
@@ -9,7 +9,7 @@ English | [中文](README.zh.md)
 
 ## Summary
 
-`dsh-native-command` runs host executables without a shell and opens Host filesystem paths through the desktop. The command runner captures utf8 output, propagates cancellation, and hides transient Windows consoles. The path opener supports default-application and text-editor intents, browser-renderable documents, WSL translation, and desktop availability checks. It is a library, not a plugin: no `ctx`, no state, no events.
+`dsh-native-command` runs host executables without a shell — except for the Explorer reveal, which routes through the shell so Explorer honors `/select` — and opens Host filesystem paths through the desktop. The command runner captures utf8 output, propagates cancellation, and hides transient Windows consoles. The path opener supports default-application and text-editor intents, browser-renderable documents, WSL translation, and desktop availability checks. It is a library, not a plugin: no `ctx`, no state, no events.
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ English | [中文](README.zh.md)
 <a id="use-this-package"></a>
 ## Use this package
 
-Use this runner when a host-side integration must execute one native command and needs its output, its failure, or both — and must never involve a shell.
+Use this runner when a host-side integration must execute one native command and needs its output, its failure, or both — and, except for the Explorer reveal noted below, must never involve a shell.
 
 ### Running a command
 
@@ -47,7 +47,7 @@ The `NativeCommandRunner` type is the injectable command boundary for host integ
 
 `openNativePath(path, signal)` hands a path to the default application and prefers the named default browser for HTML and SVG where the platform can identify one. `openNativeTextFile(path, signal)` selects text-editor intent; on macOS it uses `open -t`. WSL paths are translated with `wslpath -w` before the Windows desktop receives them. `canOpenNativePath()` reports whether the current Host plausibly has a desktop target.
 
-`revealNativePath(path, signal)` selects the file in Finder or Explorer, including WSL path translation, and opens its parent directory through `xdg-open` on desktop Linux. `nativeFileManager()` identifies that action for Host-derived UI labels; desktop availability remains a separate `canOpenNativePath()` check. Callers must authorize the absolute file path before invoking either operation. Platform dispatch is covered by injected-runner tests; native desktop verification belongs to the corresponding platform. Explorer receives an encoded file URI as a separate argument. Its exit code 1 is accepted as a delegated handoff; cancellation, missing executables, and other exit codes still reject. This acknowledgement does not prove that a desktop window selected the file.
+`revealNativePath(path, signal)` selects the file in Finder or Explorer, including WSL path translation, and opens its parent directory through `xdg-open` on desktop Linux. `nativeFileManager()` identifies that action for Host-derived UI labels; desktop availability remains a separate `canOpenNativePath()` check. Callers must authorize the absolute file path before invoking either operation. Platform dispatch is covered by injected-runner tests; native desktop verification belongs to the corresponding platform. On native Windows the reveal routes `explorer.exe /select,<path>` through the shell so Explorer's ShellExecute handoff navigates to and selects the file even when the path contains spaces; `explorer.exe` otherwise ignores `/select` when launched via `execFile`. Its exit code 1 is accepted as a delegated handoff; cancellation, missing executables, and other exit codes still reject. This acknowledgement does not prove that a desktop window selected the file.
 
 -----
 
@@ -57,20 +57,20 @@ The `NativeCommandRunner` type is the injectable command boundary for host integ
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The command runner is a thin wrapper over Node's `execFile`. The path opener selects one shell-free command from platform and environment facts, while callers retain authority over which path may be opened.
+The command runner is a thin wrapper over Node's `execFile`. The path opener selects one command from platform and environment facts — normally shell-free, except that the native-Windows Explorer reveal routes through the shell so Explorer honors `/select` — while callers retain authority over which path may be opened.
 
 ### Source map
 
 | File | Role |
 |---|---|
 | [`src/index.ts`](src/index.ts) | Public command-runner and path-opener exports |
-| [`src/runner.ts`](src/runner.ts) | Shell-free `execFile` adapter |
+| [`src/runner.ts`](src/runner.ts) | `execFile` adapter (shell-free, with a shell opt-in for the Explorer reveal) |
 | [`src/path-opener.ts`](src/path-opener.ts) | Desktop detection, open intents, browser preference, and WSL translation |
 | — | No runtime invariant companion is published; each run is one stateless child-process round trip with no owned event stream or mutable runtime data; behavior is enforced by unit tests. |
 
 ### What execFile gives the runner
 
-`execFile` spawns the executable directly with an argv array — no shell string, no shell interpretation of the arguments. The `signal` option terminates the child when the caller's abort fires; `windowsHide` suppresses the transient console window on Windows. On a non-zero exit or spawn error, the callback attaches `code`, `stdout`, and `stderr` to the rejected error and keeps the original error as `cause`.
+`execFile` spawns the executable directly with an argv array — no shell string, no shell interpretation of the arguments. The `signal` option terminates the child when the caller's abort fires; `windowsHide` suppresses the transient console window on Windows. On a non-zero exit or spawn error, the callback attaches `code`, `stdout`, and `stderr` to the rejected error and keeps the original error as `cause`. The runner accepts a `shell` opt-in that routes a single command through the platform shell; the Explorer reveal uses it because `explorer.exe` ignores `/select` when launched directly via `execFile`.
 
 </details>
 
