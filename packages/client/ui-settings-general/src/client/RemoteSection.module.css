@@ -93,3 +93,24 @@
 .copy:hover {
   background: var(--dsh-hover-bg, rgba(128, 128, 128, 0.1));
 }
+
+.start {
+  align-self: flex-start;
+  padding: 8px 14px;
+  border: 1px solid var(--dsh-accent, rgba(80, 140, 230, 0.6));
+  border-radius: 6px;
+  background: var(--dsh-accent, rgba(80, 140, 230, 0.12));
+  color: var(--dsh-accent-text, inherit);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.start:hover:not(:disabled) {
+  background: var(--dsh-accent-hover, rgba(80, 140, 230, 0.2));
+}
+
+.start:disabled {
+  opacity: 0.6;
+  cursor: default;
+}

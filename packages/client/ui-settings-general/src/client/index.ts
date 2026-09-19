@@ -30,6 +30,7 @@ import { DesktopUpdateSource } from './desktop-update-source.ts'
 import { CloseLabel, HeaderContent, TriggerContent } from './chrome.tsx'
 import { GeneralSection } from './GeneralSection.tsx'
 import { RemoteSection } from './RemoteSection.tsx'
+import type { RemoteSectionInjected } from './RemoteSection.tsx'
 import { SettingsDocumentAction } from './SettingsDocumentAction.tsx'
 import type { SettingsDocumentActionInjected } from './SettingsDocumentAction.tsx'
 import { SettingsDocumentStore } from './settings-document-store.ts'
@@ -200,5 +201,13 @@ export function apply(ctx: ClientContext): void {
     order: 5,
     label: () => t('remote.nav'),
     locale: NS,
+    inject: (): RemoteSectionInjected => ({
+      startPublicAccess: async () => {
+        const result = await connection.rpc.call('/api', 'web-tunnel/start', { args: {} })
+        if (!result.ok) throw new Error(result.error.message)
+        const view = result.value as { url: string }
+        return view.url
+      },
+    }),
   }, RemoteSection))
 }

@@ -38,8 +38,11 @@ export const zh = {
   'remote.urlLabel': '连接地址',
   'remote.copy': '复制',
   'remote.copied': '已复制',
-  'remote.notPublic': '当前地址仅在本机可访问。请使用 --tunnel 启动以获取公网二维码。',
+  'remote.notPublic': '当前地址仅在本机可访问。点击下方按钮开启公网访问。',
   'remote.localOnly': '本机地址',
+  'remote.startPublic': '开启公网访问',
+  'remote.starting': '正在开启…',
+  'remote.startFailed': '无法开启公网访问，请重试。',
 } satisfies Record<string, string>
 
 /** The settings namespace key union. */
@@ -83,6 +86,9 @@ export const en = {
   'remote.urlLabel': 'Connection URL',
   'remote.copy': 'Copy',
   'remote.copied': 'Copied',
-  'remote.notPublic': 'This address is only reachable on this machine. Start with --tunnel to get a public QR code.',
+  'remote.notPublic': 'This address is only reachable on this machine. Start public access below to get a QR that works from any network.',
   'remote.localOnly': 'Local address',
+  'remote.startPublic': 'Start public access',
+  'remote.starting': 'Starting…',
+  'remote.startFailed': 'Could not start public access. Please try again.',
 } satisfies Record<SettingsKey, string>

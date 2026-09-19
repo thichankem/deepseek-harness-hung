@@ -28,6 +28,7 @@ import type {} from '@deepseek-ai/cordis-plugin-loader'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type {} from '@deepseek-ai/dsh-shell-env'
 import qrcode from 'qrcode'
+import { WebTunnelController } from './web-tunnel.ts'
 
 /** Stable Cordis plugin name. */
 export const name = 'web-app'
@@ -364,6 +365,13 @@ export function apply(ctx: Context, config: Config): void {
   const handoffBrowser = config.openBrowser && !launchedThroughSsh(launchEnvironmentOf(ctx))
   // Release dependent rows only after bind-dependent trust has been sampled once.
   ctx.provide(WEB_RUNTIME_SERVICE, runtime)
+  // On-demand public access: a Remote-owned Cloudflare tunnel whose origin the
+  // Remote Connection settings page renders as a QR code.
+  ctx.plugin(WebTunnelController, {
+    port: ctx.webServer.port,
+    startTunnel: (port) => internals.startCloudflareTunnel(port),
+    authenticate: (url) => ctx.get('connection')?.authenticatedUrl(url) ?? url,
+  })
   ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
   if (config.surfaceContext) {
     ctx.inject(['systemPrompt'], (promptCtx) => {

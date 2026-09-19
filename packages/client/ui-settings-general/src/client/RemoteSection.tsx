@@ -1,60 +1,109 @@
 /**
  * Remote Connection settings page: the address the current session is served
  * at, rendered as a scannable QR code plus a copyable URL. Scanning the QR on
- * a phone opens the same authenticated session, so the page is most useful
- * when the GUI is reached through a public Cloudflare tunnel (`--tunnel`).
+ * a phone opens the same authenticated session from any network. When the page
+ * is only reachable on loopback, a "Start public access" action asks the host
+ * to open a Cloudflare tunnel and re-renders the QR for that public origin.
  */
 import { useEffect, useState } from 'react'
 import { toDataURL } from 'qrcode/lib/browser.js'
-import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import css from './RemoteSection.module.css'
 
+/** Registration-side face used by the page. */
+export interface RemoteSectionInjected {
+  /**
+   * Ask the host to start (or reuse) a public Cloudflare tunnel.
+   * @returns the public HTTPS origin Cloudflare assigned to the tunnel.
+   */
+  startPublicAccess: () => Promise<string>
+}
+
 /** Full component props assembled by the Settings slot renderer. */
-export type RemoteSectionProps = PropsLocale<'settings'>
+export type RemoteSectionProps =
+  PropsRuntime<'settings.section'>
+  & PropsLocale<'settings'>
+  & InjectFace<RemoteSectionInjected>
 
 /** Loopback origins that a phone can never reach. */
 const LOOPBACK_RE = /^https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(?::\d+)?(?:\/|$)/iu
+
+/** Reuse the session launch token on the public origin so the QR opens authenticated. */
+function withLaunchToken(origin: string): string {
+  const token = new URL(window.location.href).searchParams.get('token')
+  return token === null ? origin : `${origin}?token=${encodeURIComponent(token)}`
+}
 
 /**
  * Render the Remote Connection page.
  * @param props - composed slot props (see {@link RemoteSectionProps}).
  * @returns the settings page element tree.
  */
-export function RemoteSection({ t }: RemoteSectionProps) {
-  const url = window.location.href
+export function RemoteSection({ t, startPublicAccess }: RemoteSectionProps) {
+  const currentUrl = window.location.href
   const [qr, setQr] = useState<string | undefined>(undefined)
   const [copied, setCopied] = useState(false)
-  const loopbackOnly = LOOPBACK_RE.test(url)
+  const [publicUrl, setPublicUrl] = useState<string | undefined>(undefined)
+  const [starting, setStarting] = useState(false)
+  const [failed, setFailed] = useState(false)
+  const loopbackOnly = LOOPBACK_RE.test(currentUrl)
+  const displayUrl = publicUrl ?? currentUrl
 
   useEffect(() => {
     let cancelled = false
-    toDataURL(url, { margin: 1, width: 240, errorCorrectionLevel: 'M' }).then((dataUrl) => {
+    toDataURL(displayUrl, { margin: 1, width: 260, errorCorrectionLevel: 'M' }).then((dataUrl) => {
       if (!cancelled) setQr(dataUrl)
     }).catch(() => { /* a QR render failure leaves the placeholder visible */ })
     return () => { cancelled = true }
-  }, [url])
+  }, [displayUrl])
 
   const copy = async (): Promise<void> => {
     try {
-      await navigator.clipboard.writeText(url)
+      await navigator.clipboard.writeText(displayUrl)
       setCopied(true)
       window.setTimeout(() => { setCopied(false) }, 2_000)
     } catch { /* clipboard unavailable; the URL stays visible to copy by hand */ }
   }
 
+  const startPublic = async (): Promise<void> => {
+    setStarting(true)
+    setFailed(false)
+    try {
+      const origin = await startPublicAccess()
+      setPublicUrl(withLaunchToken(origin))
+    } catch {
+      setFailed(true)
+    } finally {
+      setStarting(false)
+    }
+  }
+
   return (
     <div className={css.section}>
       <p className={css.description}>{t('remote.description')}</p>
-      {loopbackOnly ? <p className={css.notice}>{t('remote.notPublic')}</p> : null}
+      {loopbackOnly && publicUrl === undefined
+        ? <p className={css.notice}>{t('remote.notPublic')}</p>
+        : null}
+      {failed ? <p className={css.notice}>{t('remote.startFailed')}</p> : null}
       <div className={css.card}>
         {qr !== undefined
           ? <img className={css.qr} src={qr} alt={t('remote.qrHint')} />
           : <div className={css.qrPlaceholder} aria-hidden="true" />}
         <p className={css.qrHint}>{t('remote.qrHint')}</p>
       </div>
+      {loopbackOnly && publicUrl === undefined ? (
+        <button
+          type="button"
+          className={css.start}
+          onClick={() => { void startPublic() }}
+          disabled={starting}
+        >
+          {starting ? t('remote.starting') : t('remote.startPublic')}
+        </button>
+      ) : null}
       <div className={css.urlRow}>
         <span className={css.urlLabel}>{t('remote.urlLabel')}</span>
-        <code className={css.url}>{url}</code>
+        <code className={css.url}>{displayUrl}</code>
         <button type="button" className={css.copy} onClick={() => { void copy() }}>
           {copied ? t('remote.copied') : t('remote.copy')}
         </button>
