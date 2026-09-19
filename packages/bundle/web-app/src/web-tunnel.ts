@@ -66,4 +66,16 @@ export class WebTunnelController extends TypertRemoteService {
     this.tunnel = undefined
     return { stopped: true }
   }
+
+  /**
+   * Append the session launch token to an origin so a scanned QR opens the
+   * session already authenticated. The browser strips the token from its own
+   * address after login, so the client asks the host (which owns the token).
+   * @param origin - base origin to authenticate.
+   * @returns the origin carrying the launch token.
+   */
+  @Remote
+  async authenticateUrl(origin: string): Promise<{ url: string }> {
+    return { url: this.config.authenticate(origin) }
+  }
 }

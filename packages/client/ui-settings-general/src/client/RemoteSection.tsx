@@ -17,6 +17,14 @@ export interface RemoteSectionInjected {
    * @returns the public HTTPS origin Cloudflare assigned to the tunnel.
    */
   startPublicAccess: () => Promise<string>
+  /**
+   * Append the session launch token to an origin so a scanned QR opens the
+   * session already authenticated. The browser strips the token from its own
+   * address after login, so the host (which owns the token) supplies it.
+   * @param origin - base origin to authenticate.
+   * @returns the origin carrying the launch token.
+   */
+  authenticateUrl: (origin: string) => Promise<string>
 }
 
 /** Full component props assembled by the Settings slot renderer. */
@@ -28,27 +36,30 @@ export type RemoteSectionProps =
 /** Loopback origins that a phone can never reach. */
 const LOOPBACK_RE = /^https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0\.0)(?::\d+)?(?:\/|$)/iu
 
-/** Reuse the session launch token on the public origin so the QR opens authenticated. */
-function withLaunchToken(origin: string): string {
-  const token = new URL(window.location.href).searchParams.get('token')
-  return token === null ? origin : `${origin}?token=${encodeURIComponent(token)}`
-}
-
 /**
  * Render the Remote Connection page.
  * @param props - composed slot props (see {@link RemoteSectionProps}).
  * @returns the settings page element tree.
  */
-export function RemoteSection({ t, startPublicAccess }: RemoteSectionProps) {
+export function RemoteSection({ t, startPublicAccess, authenticateUrl }: RemoteSectionProps) {
   const currentUrl = window.location.href
   const [qr, setQr] = useState<string | undefined>(undefined)
   const [copied, setCopied] = useState(false)
   const [publicUrl, setPublicUrl] = useState<string | undefined>(undefined)
+  const [authUrl, setAuthUrl] = useState<string | undefined>(undefined)
   const [starting, setStarting] = useState(false)
   const [failed, setFailed] = useState(false)
   const [failReason, setFailReason] = useState<string | undefined>(undefined)
   const loopbackOnly = LOOPBACK_RE.test(currentUrl)
-  const displayUrl = publicUrl ?? currentUrl
+  const displayUrl = publicUrl ?? authUrl ?? currentUrl
+
+  useEffect(() => {
+    let cancelled = false
+    void authenticateUrl(currentUrl).then((url) => {
+      if (!cancelled) setAuthUrl(url)
+    }).catch(() => { /* keep the plain current URL if the host cannot authenticate it */ })
+    return () => { cancelled = true }
+  }, [authenticateUrl, currentUrl])
 
   useEffect(() => {
     let cancelled = false
@@ -72,7 +83,7 @@ export function RemoteSection({ t, startPublicAccess }: RemoteSectionProps) {
     setFailReason(undefined)
     try {
       const origin = await startPublicAccess()
-      setPublicUrl(withLaunchToken(origin))
+      setPublicUrl(origin)
     } catch (error) {
       setFailed(true)
       setFailReason(error instanceof Error ? error.message : String(error))
