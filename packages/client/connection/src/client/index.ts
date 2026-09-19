@@ -200,12 +200,19 @@ function watchBrowserNetwork(controller: ConnectionController): () => void {
   const focused = (): void => {
     if (browser.document?.visibilityState === 'visible') controller.reconnect()
   }
+  // Safety net for phones where a suspended WebSocket neither closes nor fires
+  // visibility/focus on return: periodically force a fresh generation while the
+  // tab is visible so the live session status re-syncs without a user tap.
+  const heartbeat = setInterval(() => {
+    if (browser.document?.visibilityState === 'visible') controller.reconnect()
+  }, 30_000)
   controller.setNetworkAvailable(initiallyAvailable)
   browser.addEventListener('online', online)
   browser.addEventListener('offline', offline)
   browser.addEventListener('visibilitychange', visible)
   browser.addEventListener('focus', focused)
   return () => {
+    clearInterval(heartbeat)
     browser.removeEventListener('online', online)
     browser.removeEventListener('offline', offline)
     browser.removeEventListener('visibilitychange', visible)
