@@ -25,6 +25,12 @@ export interface RemoteSectionInjected {
    * @returns the origin carrying the launch token.
    */
   authenticateUrl: (origin: string) => Promise<string>
+  /**
+   * Report the configured phone-reachable origin (for example a Tailscale URL)
+   * with the launch token appended, or an empty string when none is configured.
+   * @returns the authenticated public origin, or '' when unset.
+   */
+  getPublicUrl: () => Promise<string>
 }
 
 /** Full component props assembled by the Settings slot renderer. */
@@ -41,17 +47,18 @@ const LOOPBACK_RE = /^https?:\/\/(?:localhost|127\.\d+\.\d+\.\d+|\[::1\]|0\.0\.0
  * @param props - composed slot props (see {@link RemoteSectionProps}).
  * @returns the settings page element tree.
  */
-export function RemoteSection({ t, startPublicAccess, authenticateUrl }: RemoteSectionProps) {
+export function RemoteSection({ t, startPublicAccess, authenticateUrl, getPublicUrl }: RemoteSectionProps) {
   const currentUrl = window.location.href
   const [qr, setQr] = useState<string | undefined>(undefined)
   const [copied, setCopied] = useState(false)
-  const [publicUrl, setPublicUrl] = useState<string | undefined>(undefined)
+  const [tunnelUrl, setTunnelUrl] = useState<string | undefined>(undefined)
+  const [remoteUrl, setRemoteUrl] = useState<string | undefined>(undefined)
   const [authUrl, setAuthUrl] = useState<string | undefined>(undefined)
   const [starting, setStarting] = useState(false)
   const [failed, setFailed] = useState(false)
   const [failReason, setFailReason] = useState<string | undefined>(undefined)
   const loopbackOnly = LOOPBACK_RE.test(currentUrl)
-  const displayUrl = publicUrl ?? authUrl ?? currentUrl
+  const displayUrl = tunnelUrl ?? remoteUrl ?? authUrl ?? currentUrl
 
   useEffect(() => {
     let cancelled = false
@@ -60,6 +67,14 @@ export function RemoteSection({ t, startPublicAccess, authenticateUrl }: RemoteS
     }).catch(() => { /* keep the plain current URL if the host cannot authenticate it */ })
     return () => { cancelled = true }
   }, [authenticateUrl, currentUrl])
+
+  useEffect(() => {
+    let cancelled = false
+    void getPublicUrl().then((url) => {
+      if (!cancelled && url !== '') setRemoteUrl(url)
+    }).catch(() => { /* fall back to the current URL when no public origin is configured */ })
+    return () => { cancelled = true }
+  }, [getPublicUrl])
 
   useEffect(() => {
     let cancelled = false
@@ -83,7 +98,7 @@ export function RemoteSection({ t, startPublicAccess, authenticateUrl }: RemoteS
     setFailReason(undefined)
     try {
       const origin = await startPublicAccess()
-      setPublicUrl(origin)
+      setTunnelUrl(origin)
     } catch (error) {
       setFailed(true)
       setFailReason(error instanceof Error ? error.message : String(error))
@@ -95,7 +110,7 @@ export function RemoteSection({ t, startPublicAccess, authenticateUrl }: RemoteS
   return (
     <div className={css.section}>
       <p className={css.description}>{t('remote.description')}</p>
-      {loopbackOnly && publicUrl === undefined
+      {loopbackOnly && tunnelUrl === undefined && remoteUrl === undefined
         ? <p className={css.notice}>{t('remote.notPublic')}</p>
         : null}
       {failed ? (
@@ -110,7 +125,7 @@ export function RemoteSection({ t, startPublicAccess, authenticateUrl }: RemoteS
           : <div className={css.qrPlaceholder} aria-hidden="true" />}
         <p className={css.qrHint}>{t('remote.qrHint')}</p>
       </div>
-      {loopbackOnly && publicUrl === undefined ? (
+      {loopbackOnly && tunnelUrl === undefined && remoteUrl === undefined ? (
         <button
           type="button"
           className={css.start}

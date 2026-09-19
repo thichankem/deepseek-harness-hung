@@ -64,6 +64,13 @@ export interface Config {
   tunnelName?: string
   /** Public hostname served by the named tunnel, e.g. `dsh.example.com`. */
   tunnelHostname?: string
+  /**
+   * A phone-reachable origin for the Remote Connection QR (for example a
+   * Tailscale URL such as `http://100.73.189.14:8650`). When set, the Remote
+   * Connection page shows it instead of a loopback address, so scanning the QR
+   * from a phone works without a public tunnel.
+   */
+  publicUrl?: string
 }
 
 export const Config: z<Config> = z.object({
@@ -74,6 +81,7 @@ export const Config: z<Config> = z.object({
   tunnel: z.boolean().default(false),
   tunnelName: z.string(),
   tunnelHostname: z.string(),
+  publicUrl: z.string(),
 })
 
 /** Bind-dependent Web values shared by the trust fence and URL display. */
@@ -393,6 +401,7 @@ export function apply(ctx: Context, config: Config): void {
     port: ctx.webServer.port,
     startTunnel: (port) => internals.startCloudflareTunnel(port),
     authenticate: (url) => ctx.get('connection')?.authenticatedUrl(url) ?? url,
+    ...config.publicUrl !== undefined && { publicUrl: config.publicUrl },
   })
   ctx.plugin(FrontendStatic, { distIndex: internals.resolveDistIndex() })
   if (config.surfaceContext) {

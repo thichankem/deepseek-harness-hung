@@ -214,6 +214,12 @@ export function apply(ctx: ClientContext): void {
         const view = result.value as { url: string }
         return view.url
       },
+      getPublicUrl: async () => {
+        const result = await connection.rpc.call('/api', 'web-tunnel/publicUrl', { args: {} })
+        if (!result.ok) throw new Error(result.error.message)
+        const view = result.value as { url: string }
+        return view.url
+      },
     }),
   }, RemoteSection))
 }

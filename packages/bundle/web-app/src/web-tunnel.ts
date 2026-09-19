@@ -18,6 +18,11 @@ export interface WebTunnelControllerConfig {
   startTunnel: (port: number) => Promise<CloudflareTunnel>
   /** Append the session launch token so the returned URL opens authenticated. */
   authenticate: (url: string) => string
+  /**
+   * A phone-reachable origin (for example a Tailscale URL) shown on the Remote
+   * Connection QR instead of a loopback address, so no public tunnel is needed.
+   */
+  publicUrl?: string
 }
 
 /** One public-access session as the client renders it. */
@@ -77,5 +82,16 @@ export class WebTunnelController extends TypertRemoteService {
   @Remote
   async authenticateUrl(origin: string): Promise<{ url: string }> {
     return { url: this.config.authenticate(origin) }
+  }
+
+  /**
+   * Report the configured phone-reachable origin (for example a Tailscale URL)
+   * with the launch token appended, so the Remote Connection QR works from a
+   * phone without a public tunnel. Undefined when none is configured.
+   * @returns the authenticated public origin, or an empty string when unset.
+   */
+  @Remote
+  async publicUrl(): Promise<{ url: string }> {
+    return { url: this.config.publicUrl === undefined ? '' : this.config.authenticate(this.config.publicUrl) }
   }
 }
